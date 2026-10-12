@@ -41,7 +41,7 @@ VPNGATE_MIRROR = os.environ.get(
     "VPNGATE_MIRROR",
     "https://raw.githubusercontent.com/fdciabdul/Vpngate-Scraper-API/main/json/data.json",
 )
-WORKER_CHECK_URL = os.environ.get("CHECK_WORKER", "https://xiao.yangcv.ccwu.cc/check?sstp=vpn:vpn@")
+WORKER_CHECK_URL = os.environ.get("CHECK_WORKER", "CHECK_WORKER: ${{ secrets.DOMAIN }}")
 CONCURRENCY = max(1, int(os.environ.get("CHECK_CONCURRENCY", "32")))
 CHECK_TIMEOUT = float(os.environ.get("CHECK_TIMEOUT", "90"))
 MAX_CHECK_NODES = int(os.environ.get("MAX_CHECK_NODES", "0"))
@@ -85,14 +85,15 @@ EDGE_HOSTS = [
     h.strip()
     for h in os.environ.get(
         "EDGE_HOSTS",
-
-        "",
+        "saas.sin.fan:443,cdn.204910.best:443,www.mfyx.cn:443,p.etime.vip:443,cdn.ctn32.us.kg:443,cf.877774.xyz:443,spring.io:443,"
+        "cf.nyanya.moe:443,www.sloomb.com:443,op.chinwa.eu.cc:443,www.leics.police.uk:443,securecircle.com:443,www.shopify.com:443,"
+        "www.carousell.sg:443,www.dbs.com.sg:443,openai.com:443,linear.app:443,www.bilibili.com:443,uspto.gov:443,www.vmware.com:443",
     ).split(",")
     if h.strip()
 ]
 
 # 优选 API 地址配置 (支持逗号分隔多个，可配置在 GitHub Action Secret / Env 中)
-OPTIMAL_API = os.environ.get("OPTIMAL_API", "https://cf.090227.xyz/ct?ips=6&port=443,https://cf.090227.xyz/cu?port=443,https://cf.090227.xyz/cmcc?ips=8&port=443")
+OPTIMAL_API = os.environ.get("OPTIMAL_API", "https://cf.090227.xyz/ct?ips=6&port=443")
 
 NODES_URL = os.environ.get("NODES_URL", "https://ylq2004.github.io/gate/nodes.txt")
 
@@ -213,20 +214,20 @@ def parse_mirror_json(data):
 # ---------------------------------------------------------------------------
 # 优选 API 获取与解析
 # ---------------------------------------------------------------------------
-def fetch_optimal_api_endpoints(api_s_str):
+def fetch_optimal_api_endpoints(api_urls_str):
     """
     拉取优选 API，解析如: 172.66.1.179:443#CF 电信优选 格式的内容
     提取出纯 'IP:端口' (例如 172.66.1.179:443)
     """
-    if not api_s_str.strip():
+    if not api_urls_str.strip():
         return []
     
     endpoints = []
-    s = [u.strip() for u in api_s_str.split(",") if u.strip()]
-    for  in s:
+    urls = [u.strip() for u in api_urls_str.split(",") if u.strip()]
+    for url in urls:
         try:
-            log("OPTIMAL API", f"请求优选 API: {}")
-            resp = requests.get(, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+            log("OPTIMAL API", f"请求优选 API: {url}")
+            resp = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
             if resp.status_code == 200:
                 lines = resp.text.strip().splitlines()
                 count = 0
@@ -246,7 +247,7 @@ def fetch_optimal_api_endpoints(api_s_str):
             else:
                 log("OPTIMAL API", f"API 返回状态码异常: {resp.status_code}")
         except Exception as e:
-            log("OPTIMAL API", f"拉取优选 API 失败 ({}): {e}")
+            log("OPTIMAL API", f"拉取优选 API 失败 ({url}): {e}")
     return endpoints
 
 def get_combined_edge_hosts():
@@ -323,7 +324,7 @@ def classify_network(host, exit_org, is_datacenter=None):
     return "unknown"
 
 def check_one(node, session):
-     = WORKER_CHECK_ + quote(f"{node['host']}:{node['port']}", safe="")
+    url = WORKER_CHECK_URL + quote(f"{node['host']}:{node['port']}", safe="")
     out = dict(node)
     out["protocol"] = "sstp"
     out["link"] = f"sstp://vpn:vpn@{node['host']}:{node['port']}"
@@ -332,7 +333,7 @@ def check_one(node, session):
     out["exit"] = None
     out["residential"] = "unknown"
     try:
-        r = session.get(url, timeout=_TIMEOUT, headers={"User-Agent": "Mozilla/5.0 (gate-er)"})
+        r = session.get(url, timeout=CHECK_TIMEOUT, headers={"User-Agent": "Mozilla/5.0 (gate-checker)"})
         if r.status_code != 200:
             out["error"] = f"HTTP {r.status_code}"
             out["worker_error"] = True
@@ -343,7 +344,7 @@ def check_one(node, session):
         out["status"] = "success" if ok else "failed"
         out["latency_ms"] = j.get("responseTime")
         out["colo"] = j.get("colo")
-        out["error"] = (None if ok else (j.get("error") or j.get("message") or " failed"))
+        out["error"] = (None if ok else (j.get("error") or j.get("message") or "check failed"))
         exit_info = j.get("exit") or {}
         if exit_info:
             asn = exit_info.get("asn") or {}
@@ -368,10 +369,10 @@ def check_one(node, session):
         out["worker_error"] = True
         return out
 
-def _all(nodes, session):
+def check_all(nodes, session):
     results = []
     with ThreadPoolExecutor(max_workers=CONCURRENCY) as pool:
-        futures = [pool.submit(_one, n, session) for n in nodes]
+        futures = [pool.submit(check_one, n, session) for n in nodes]
         for fut in as_completed(futures):
             results.append(fut.result())
     return results
