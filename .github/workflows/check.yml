@@ -34,7 +34,7 @@ jobs:
         run: python vpngate.py
         env:
           # 已部署的检测 Worker (不要改动: 检测统一走这里)
-          CHECK_WORKER: ${{ secrets.DOMAIN }}
+          WORKER_CHECK_URL: ${{ secrets.WORKER_CHECK_URL }}
           CHECK_CONCURRENCY: "32"
           CHECK_TIMEOUT: "90"
 
